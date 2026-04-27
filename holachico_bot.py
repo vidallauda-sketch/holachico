@@ -27,7 +27,7 @@ CHATS_FILE = "data/chats.json"
 SUGERENCIAS_FILE = "data/sugerencias.json"
 
 ADMIN_ID = 8400361723
-TOKEN = "AQUI_TU_TOKEN"
+TOKEN = "8197198334:AAGQMMTQSi_zplmgNQfYXvAMwjkDUq2qq3Q"
 CANAL_ID = -1002459139025
 
 # ------------------------------
