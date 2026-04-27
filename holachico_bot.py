@@ -682,9 +682,15 @@ async def miid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ------------------------------
 #   MAIN
 # ------------------------------
+async def debug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await update.message.reply_text(
+        f"Tipo: {chat.type}\nID: {chat.id}"
+    )
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("debug", debug))
 
     app.add_handler(CommandHandler("start", start))
 
