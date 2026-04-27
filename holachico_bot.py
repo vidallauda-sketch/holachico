@@ -1,6 +1,8 @@
 import json
 import os
-
+import logging
+import asyncio
+from aiohttp import web
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -17,76 +19,79 @@ from telegram.ext import (
     filters,
 )
 
-# ------------------------------
-#   CONFIGURACIÓN
-# ------------------------------
+# Configurar logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# ==============================
+#   CONFIGURACIÓN SEGURA
+# ==============================
+
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+PORT = int(os.getenv("PORT", "8080"))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Ej: https://tudominio.railway.app
+
+if not TOKEN:
+    raise ValueError("❌ La variable de entorno BOT_TOKEN es obligatoria")
+
+# ==============================
+#   ARCHIVOS JSON (con lock para evitar race conditions)
+# ==============================
 
 PERFILES_FILE = "perfiles.json"
 LIKES_FILE = "likes.json"
 CHATS_FILE = "chats.json"
 SUGERENCIAS_FILE = "sugerencias.json"
 
-ADMIN_ID = 8400361723  # tu ID de administrador
-TOKEN = "8197198334:AAHHxsA_4DfQgjF1Cy3Fz8UR4F_kiycJ5QM"  # ← PON AQUÍ TU TOKEN REAL
+# Lock global para operaciones de archivo
+_file_lock = asyncio.Lock()
 
-# ------------------------------
-#   UTILIDADES JSON
-# ------------------------------
-
-def cargar_json(ruta):
-    if not os.path.exists(ruta):
-        return {}
-    with open(ruta, "r", encoding="utf-8") as f:
+async def cargar_json(ruta):
+    async with _file_lock:
+        if not os.path.exists(ruta):
+            return {}
         try:
-            return json.load(f)
-        except json.JSONDecodeError:
+            with open(ruta, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            logger.error(f"Error leyendo {ruta}")
             return {}
 
-def guardar_json(ruta, datos):
-    with open(ruta, "w", encoding="utf-8") as f:
-        json.dump(datos, f, ensure_ascii=False, indent=2)
+async def guardar_json(ruta, datos):
+    async with _file_lock:
+        try:
+            with open(ruta, "w", encoding="utf-8") as f:
+                json.dump(datos, f, ensure_ascii=False, indent=2)
+        except IOError as e:
+            logger.error(f"Error escribiendo {ruta}: {e}")
 
-# ------------------------------
-#   ARCHIVOS
-# ------------------------------
-
-def cargar_perfiles():
-    return cargar_json(PERFILES_FILE)
-
-def guardar_perfiles(perfiles):
-    guardar_json(PERFILES_FILE, perfiles)
-
-def cargar_likes():
-    return cargar_json(LIKES_FILE)
-
-def guardar_likes(likes):
-    guardar_json(LIKES_FILE, likes)
-
-def cargar_chats():
-    return cargar_json(CHATS_FILE)
-
-def guardar_chats(chats):
-    guardar_json(CHATS_FILE, chats)
-
-def cargar_sugerencias():
-    return cargar_json(SUGERENCIAS_FILE)
-
-def guardar_sugerencias(sugerencias):
-    guardar_json(SUGERENCIAS_FILE, sugerencias)
+# Helpers específicos
+async def cargar_perfiles(): return await cargar_json(PERFILES_FILE)
+async def guardar_perfiles(d): await guardar_json(PERFILES_FILE, d)
+async def cargar_likes(): return await cargar_json(LIKES_FILE)
+async def guardar_likes(d): await guardar_json(LIKES_FILE, d)
+async def cargar_chats(): return await cargar_json(CHATS_FILE)
+async def guardar_chats(d): await guardar_json(CHATS_FILE, d)
+async def cargar_sugerencias(): return await cargar_json(SUGERENCIAS_FILE)
+async def guardar_sugerencias(d): await guardar_json(SUGERENCIAS_FILE, d)
 
 def asegurar_usuario_en_likes(likes, user_id):
     if user_id not in likes:
         likes[user_id] = {"dados": [], "recibidos": []}
 
-# ------------------------------
-#   ESTADOS DEL PERFIL
-# ------------------------------
+# ==============================
+#   ESTADOS
+# ==============================
 
 FOTO, EDAD, CIUDAD, BUSCA, DESCRIPCION, ROL, ESTATURA = range(7)
 
-# ------------------------------
-#   /start
-# ------------------------------
+# ==============================
+#   COMANDOS BÁSICOS
+# ==============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -105,11 +110,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ------------------------------
+# ==============================
 #   CREACIÓN DE PERFIL
-# ------------------------------
+# ==============================
 
 async def perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     context.user_data["fotos"] = []
     await update.message.reply_text(
         "📸 Envíame *todas las fotos que quieras* para tu perfil.\n"
@@ -128,27 +134,30 @@ async def fotos_listas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("fotos"):
         await update.message.reply_text("Necesitas enviar al menos una foto antes de seguir.")
         return FOTO
-
     await update.message.reply_text("📅 ¿Qué *edad* tienes?", parse_mode="Markdown")
     return EDAD
 
 async def recibir_edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["edad"] = update.message.text
+    texto = update.message.text.strip()
+    if not texto.isdigit() or not (18 <= int(texto) <= 99):
+        await update.message.reply_text("❌ Por favor, introduce una edad válida (18-99).")
+        return EDAD
+    context.user_data["edad"] = texto
     await update.message.reply_text("📍 ¿En qué *ciudad* estás?", parse_mode="Markdown")
     return CIUDAD
 
 async def recibir_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["ciudad"] = update.message.text
+    context.user_data["ciudad"] = update.message.text.strip()
     await update.message.reply_text("💘 ¿Qué *buscas*? (amigos, relación, charlar…)", parse_mode="Markdown")
     return BUSCA
 
 async def recibir_busca(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["busca"] = update.message.text
+    context.user_data["busca"] = update.message.text.strip()
     await update.message.reply_text("📝 Escribe una *descripción* sobre ti.", parse_mode="Markdown")
     return DESCRIPCION
 
 async def recibir_descripcion(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["descripcion"] = update.message.text
+    context.user_data["descripcion"] = update.message.text.strip()
     await update.message.reply_text(
         "🎭 ¿Cuál es tu *rol*?\n"
         "- activo\n- pasivo\n- inter\n- inter activo\n- inter pasivo",
@@ -157,19 +166,41 @@ async def recibir_descripcion(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ROL
 
 async def recibir_rol(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["rol"] = update.message.text
+    validos = ["activo", "pasivo", "inter", "inter activo", "inter pasivo"]
+    rol = update.message.text.strip().lower()
+    if rol not in validos:
+        await update.message.reply_text("❌ Rol no válido. Elige uno de la lista.")
+        return ROL
+    context.user_data["rol"] = rol
     await update.message.reply_text("📏 ¿Cuál es tu *estatura*? (ej: 1.78)", parse_mode="Markdown")
     return ESTATURA
 
 async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["estatura"] = update.message.text
+    estatura = update.message.text.strip().replace(",", ".")
+    try:
+        val = float(estatura)
+        if not (1.0 <= val <= 2.5):
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("❌ Estatura no válida. Usa formato como 1.78")
+        return ESTATURA
 
+    context.user_data["estatura"] = estatura
     user_id = str(update.effective_user.id)
-    perfiles = cargar_perfiles()
-    perfiles[user_id] = context.user_data
-    guardar_perfiles(perfiles)
+    
+    perfiles = await cargar_perfiles()
+    perfiles[user_id] = {
+        "fotos": context.user_data["fotos"],
+        "edad": context.user_data["edad"],
+        "ciudad": context.user_data["ciudad"],
+        "busca": context.user_data["busca"],
+        "descripcion": context.user_data["descripcion"],
+        "rol": context.user_data["rol"],
+        "estatura": estatura,
+    }
+    await guardar_perfiles(perfiles)
 
-    p = context.user_data
+    p = perfiles[user_id]
     texto = (
         f"📸 *Tu perfil está listo*\n\n"
         f"Edad: {p['edad']}\n"
@@ -180,17 +211,12 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Estatura: {p['estatura']}"
     )
 
-    await update.message.reply_photo(
-        photo=p["fotos"][0],
-        caption=texto,
-        parse_mode="Markdown"
-    )
-
+    await update.message.reply_photo(photo=p["fotos"][0], caption=texto, parse_mode="Markdown")
     return ConversationHandler.END
 
-# ------------------------------
-#   VER PERFILES + GALERÍA
-# ------------------------------
+# ==============================
+#   VER PERFILES
+# ==============================
 
 def construir_texto_perfil(p):
     return (
@@ -203,13 +229,11 @@ def construir_texto_perfil(p):
     )
 
 async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    perfiles = cargar_perfiles()
-    ids = list(perfiles.keys())
-
+    perfiles = await cargar_perfiles()
     user_id = str(update.effective_user.id)
-    if user_id in ids:
-        ids.remove(user_id)
-
+    
+    ids = [uid for uid in perfiles.keys() if uid != user_id]
+    
     if not ids:
         await update.message.reply_text("😕 Aún no hay otros perfiles.")
         return
@@ -221,15 +245,23 @@ async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await mostrar_perfil(update, context)
 
 async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    perfiles = cargar_perfiles()
-    ids = context.user_data["lista_perfiles"]
-    indice = context.user_data["indice"]
+    perfiles = await cargar_perfiles()
+    ids = context.user_data.get("lista_perfiles", [])
+    indice = context.user_data.get("indice", 0)
+    
+    if not ids or indice >= len(ids):
+        await update.message.reply_text("No hay más perfiles para mostrar.")
+        return
+
     user_id = ids[indice]
-    p = perfiles[user_id]
+    p = perfiles.get(user_id)
+    if not p:
+        await update.message.reply_text("Perfil no encontrado.")
+        return
 
     texto = construir_texto_perfil(p)
-
     fotos = p.get("fotos", [])
+    
     if not fotos:
         await update.message.reply_text("Este perfil no tiene fotos.")
         return
@@ -237,15 +269,10 @@ async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["foto_index"] = 0
 
     botones = [
-        [
-            InlineKeyboardButton("⬅️", callback_data="foto_prev"),
-            InlineKeyboardButton("➡️", callback_data="foto_next")
-        ],
-        [
-            InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
-            InlineKeyboardButton("💬 Contactar", callback_data=f"contactar_{user_id}")
-        ],
-        [InlineKeyboardButton("➡️ Siguiente", callback_data="siguiente")]
+        [InlineKeyboardButton("⬅️", callback_data="foto_prev"),
+         InlineKeyboardButton("➡️", callback_data="foto_next")],
+        [InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
+         InlineKeyboardButton("➡️ Siguiente", callback_data="siguiente")]
     ]
 
     await update.message.reply_photo(
@@ -258,15 +285,17 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    perfiles = cargar_perfiles()
+    perfiles = await cargar_perfiles()
     ids = context.user_data.get("lista_perfiles", [])
     indice = context.user_data.get("indice", 0)
 
-    if not ids:
+    if not ids or indice >= len(ids):
         return
 
     user_id = ids[indice]
-    p = perfiles[user_id]
+    p = perfiles.get(user_id)
+    if not p:
+        return
 
     fotos = p.get("fotos", [])
     if not fotos:
@@ -280,19 +309,13 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         foto_index = (foto_index - 1) % len(fotos)
 
     context.user_data["foto_index"] = foto_index
-
     texto = construir_texto_perfil(p)
 
     botones = [
-        [
-            InlineKeyboardButton("⬅️", callback_data="foto_prev"),
-            InlineKeyboardButton("➡️", callback_data="foto_next")
-        ],
-        [
-            InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
-            InlineKeyboardButton("💬 Contactar", callback_data=f"contactar_{user_id}")
-        ],
-        [InlineKeyboardButton("➡️ Siguiente", callback_data="siguiente")]
+        [InlineKeyboardButton("⬅️", callback_data="foto_prev"),
+         InlineKeyboardButton("➡️", callback_data="foto_next")],
+        [InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
+         InlineKeyboardButton("➡️ Siguiente", callback_data="siguiente")]
     ]
 
     await query.edit_message_media(
@@ -300,9 +323,9 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(botones)
     )
 
-# ------------------------------
-#   BOTONES: LIKE / CONTACTAR / SIGUIENTE
-# ------------------------------
+# ==============================
+#   BOTONES: LIKE / SIGUIENTE
+# ==============================
 
 async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -310,24 +333,32 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     from_id = str(query.from_user.id)
 
-    perfiles = cargar_perfiles()
-    likes = cargar_likes()
+    perfiles = await cargar_perfiles()
+    likes = await cargar_likes()
     asegurar_usuario_en_likes(likes, from_id)
 
     # SIGUIENTE
     if data == "siguiente":
-        context.user_data["indice"] += 1
-        if context.user_data["indice"] >= len(context.user_data["lista_perfiles"]):
+        context.user_data["indice"] = context.user_data.get("indice", 0) + 1
+        ids = context.user_data.get("lista_perfiles", [])
+        
+        if context.user_data["indice"] >= len(ids):
             context.user_data["indice"] = 0
 
-        ids = context.user_data["lista_perfiles"]
         indice = context.user_data["indice"]
+        if indice >= len(ids):
+            await query.message.reply_text("No hay más perfiles.")
+            return
+
         user_id = ids[indice]
-        p = perfiles[user_id]
+        p = perfiles.get(user_id)
+        if not p:
+            await query.message.reply_text("Perfil no disponible.")
+            return
 
         texto = construir_texto_perfil(p)
-
         fotos = p.get("fotos", [])
+        
         if not fotos:
             await query.message.reply_text("Este perfil no tiene fotos.")
             return
@@ -335,15 +366,10 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["foto_index"] = 0
 
         botones_kb = [
-            [
-                InlineKeyboardButton("⬅️", callback_data="foto_prev"),
-                InlineKeyboardButton("➡️", callback_data="foto_next")
-            ],
-            [
-                InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
-                InlineKeyboardButton("💬 Contactar", callback_data=f"contactar_{user_id}")
-            ],
-            [InlineKeyboardButton("➡️ Siguiente", callback_data="siguiente")]
+            [InlineKeyboardButton("⬅️", callback_data="foto_prev"),
+             InlineKeyboardButton("➡️", callback_data="foto_next")],
+            [InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
+             InlineKeyboardButton("➡️ Siguiente", callback_data="siguiente")]
         ]
 
         await query.message.reply_photo(
@@ -363,18 +389,20 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if from_id not in likes[target_id]["recibidos"]:
             likes[target_id]["recibidos"].append(from_id)
 
-        guardar_likes(likes)
+        await guardar_likes(likes)
 
+        # Notificar al target
         try:
             await context.application.bot.send_message(
                 chat_id=int(target_id),
                 text="❤️ Alguien te ha dado *me gusta*.",
                 parse_mode="Markdown"
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"No se pudo notificar like a {target_id}: {e}")
 
-        if from_id in likes[target_id]["dados"]:
+        # Verificar match
+        if from_id in likes.get(target_id, {}).get("dados", []):
             nombre_from = query.from_user.first_name or "Alguien"
             try:
                 await context.application.bot.send_message(
@@ -400,36 +428,13 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # CONTACTAR
-    if data.startswith("contactar_"):
-        target_id = data.split("_")[1]
-        nombre_from = query.from_user.first_name or "Alguien"
-
-        try:
-            await context.application.bot.send_message(
-                chat_id=int(target_id),
-                text=(
-                    f"💬 {nombre_from} quiere contactar contigo.\n"
-                    f"Puedes hablar con esta persona si tenéis match usando /chat.\n"
-                    f"También puedes abrir su perfil o usar:\n"
-                    f"👉 tg://user?id={from_id}"
-                )
-            )
-        except Exception:
-            pass
-
-        await query.message.reply_text(
-            f"Hemos avisado a esa persona. También puedes intentar escribirle aquí:\n👉 tg://user?id={target_id}"
-        )
-        return
-
-# ------------------------------
-#   /likes y /matches
-# ------------------------------
+# ==============================
+#   LIKES Y MATCHES
+# ==============================
 
 async def likes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    likes = cargar_likes()
+    likes = await cargar_likes()
     asegurar_usuario_en_likes(likes, user_id)
 
     recibidos = likes[user_id]["recibidos"]
@@ -445,7 +450,7 @@ async def likes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def matches_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    likes = cargar_likes()
+    likes = await cargar_likes()
     asegurar_usuario_en_likes(likes, user_id)
 
     dados = set(likes[user_id]["dados"])
@@ -458,28 +463,24 @@ async def matches_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = "🔥 *Tus matches:*\n\n"
     for uid in matches:
-        texto += f"• ID: {uid}  (puedes usar /chat {uid})\n"
+        texto += f"• ID: `{uid}`  (usa /chat {uid})\n"
 
     await update.message.reply_text(texto, parse_mode="Markdown")
 
-# ------------------------------
+# ==============================
 #   CHAT PRIVADO
-# ------------------------------
+# ==============================
 
 async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    likes = cargar_likes()
+    likes = await cargar_likes()
     asegurar_usuario_en_likes(likes, user_id)
 
     if not context.args:
-        await update.message.reply_text(
-            "Usa /chat <id> para abrir un chat con un match.\n"
-            "Puedes ver los IDs en /matches."
-        )
+        await update.message.reply_text("Usa /chat <id> para abrir un chat con un match.")
         return
 
     target_id = context.args[0]
-
     dados = set(likes[user_id]["dados"])
     recibidos = set(likes[user_id]["recibidos"])
     matches = dados & recibidos
@@ -488,10 +489,10 @@ async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Solo puedes abrir chat con alguien que sea tu match.")
         return
 
-    chats = cargar_chats()
+    chats = await cargar_chats()
     chats[user_id] = target_id
     chats[target_id] = user_id
-    guardar_chats(chats)
+    await guardar_chats(chats)
 
     await update.message.reply_text(
         "💬 Chat privado abierto.\n"
@@ -502,18 +503,14 @@ async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.application.bot.send_message(
             chat_id=int(target_id),
-            text=(
-                "💬 Alguien ha abierto un chat privado contigo. "
-                "Todo lo que escribas aquí se enviará a esa persona.\n"
-                "Usa /cerrarchat para cerrar el chat."
-            )
+            text="💬 Alguien ha abierto un chat privado contigo. Usa /cerrarchat para cerrar."
         )
     except Exception:
         pass
 
 async def cerrarchat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    chats = cargar_chats()
+    chats = await cargar_chats()
 
     if user_id not in chats:
         await update.message.reply_text("No tienes ningún chat activo.")
@@ -523,7 +520,7 @@ async def cerrarchat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if partner_id in chats:
         del chats[partner_id]
     del chats[user_id]
-    guardar_chats(chats)
+    await guardar_chats(chats)
 
     await update.message.reply_text("🔒 Chat cerrado.")
 
@@ -537,7 +534,7 @@ async def cerrarchat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    chats = cargar_chats()
+    chats = await cargar_chats()
 
     if user_id not in chats:
         return
@@ -550,29 +547,36 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=int(partner_id),
             text=f"📩 {texto}"
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Error enviando mensaje: {e}")
 
-# ------------------------------
+# ==============================
 #   BORRAR PERFIL
-# ------------------------------
+# ==============================
 
 async def borrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    perfiles = cargar_perfiles()
-    likes = cargar_likes()
-    chats = cargar_chats()
+    
+    perfiles = await cargar_perfiles()
+    likes = await cargar_likes()
+    chats = await cargar_chats()
 
     eliminado = False
 
     if user_id in perfiles:
         del perfiles[user_id]
-        guardar_perfiles(perfiles)
+        await guardar_perfiles(perfiles)
         eliminado = True
 
     if user_id in likes:
+        # Limpiar likes dados por este usuario
+        for uid, data in likes.items():
+            if user_id in data.get("dados", []):
+                data["dados"].remove(user_id)
+            if user_id in data.get("recibidos", []):
+                data["recibidos"].remove(user_id)
         del likes[user_id]
-        guardar_likes(likes)
+        await guardar_likes(likes)
         eliminado = True
 
     if user_id in chats:
@@ -580,7 +584,7 @@ async def borrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if partner_id in chats:
             del chats[partner_id]
         del chats[user_id]
-        guardar_chats(chats)
+        await guardar_chats(chats)
         eliminado = True
 
     if eliminado:
@@ -588,9 +592,9 @@ async def borrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No tenías perfil ni interacciones guardadas.")
 
-# ------------------------------
+# ==============================
 #   SUGERENCIAS Y ADMIN
-# ------------------------------
+# ==============================
 
 async def sugerencia_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -599,35 +603,34 @@ async def sugerencia_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     texto = " ".join(context.args)
-
-    sugerencias = cargar_sugerencias()
+    sugerencias = await cargar_sugerencias()
     lista = sugerencias.get("sugerencias", [])
     lista.append({"user_id": user_id, "texto": texto})
     sugerencias["sugerencias"] = lista
-    guardar_sugerencias(sugerencias)
+    await guardar_sugerencias(sugerencias)
 
     await update.message.reply_text("✅ Gracias por tu sugerencia.")
 
-    try:
-        await context.application.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"💡 Nueva sugerencia de {user_id}:\n\n{texto}"
-        )
-    except Exception:
-        pass
+    if ADMIN_ID:
+        try:
+            await context.application.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"💡 Nueva sugerencia de {user_id}:\n\n{texto}"
+            )
+        except Exception:
+            pass
 
 async def admin_broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("No tienes permiso para usar este comando.")
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso.")
         return
 
     if not context.args:
-        await update.message.reply_text("Usa /admin_broadcast <mensaje> para enviar un aviso a todos los usuarios.")
+        await update.message.reply_text("Usa /admin_broadcast <mensaje>")
         return
 
     mensaje = " ".join(context.args)
-    perfiles = cargar_perfiles()
+    perfiles = await cargar_perfiles()
     enviados = 0
 
     for uid in perfiles.keys():
@@ -643,12 +646,11 @@ async def admin_broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(f"Mensaje enviado a {enviados} usuarios.")
 
 async def admin_sugerencias_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("No tienes permiso para usar este comando.")
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso.")
         return
 
-    sugerencias = cargar_sugerencias()
+    sugerencias = await cargar_sugerencias()
     lista = sugerencias.get("sugerencias", [])
 
     if not lista:
@@ -657,34 +659,47 @@ async def admin_sugerencias_cmd(update: Update, context: ContextTypes.DEFAULT_TY
 
     texto = "💡 *Sugerencias recibidas:*\n\n"
     for s in lista:
-        texto += f"- De {s['user_id']}: {s['texto']}\n"
+        texto += f"- De `{s['user_id']}`: {s['texto']}\n"
 
     await update.message.reply_text(texto, parse_mode="Markdown")
 
 async def admin_limpiar_sugerencias_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("No tienes permiso para usar este comando.")
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso.")
         return
 
-    guardar_sugerencias({"sugerencias": []})
+    await guardar_sugerencias({"sugerencias": []})
     await update.message.reply_text("🧹 Sugerencias limpiadas.")
 
-# ------------------------------
-#   /miid (para depuración)
-# ------------------------------
-
 async def miid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    await update.message.reply_text(f"Tu ID es: {user_id}")
+    await update.message.reply_text(f"Tu ID es: `{update.effective_user.id}`", parse_mode="Markdown")
 
-# ------------------------------
-#   MAIN
-# ------------------------------
+# ==============================
+#   WEBHOOK + MAIN
+# ==============================
+
+async def health_check(request):
+    """Endpoint para health checks de Railway"""
+    return web.Response(text="OK", status=200)
+
+async def webhook_handler(request):
+    """Recibe actualizaciones de Telegram"""
+    app = request.app["bot_app"]
+    data = await request.json()
+    update = Update.de_json(data, app.bot)
+    await app.process_update(update)
+    return web.Response(text="OK", status=200)
+
+async def setup_webhook(app, token, webhook_url):
+    """Configura el webhook con Telegram"""
+    await app.bot.set_webhook(url=webhook_url)
+    logger.info(f"Webhook configurado en: {webhook_url}")
 
 def main():
+    # Crear la aplicación de Telegram
     app = ApplicationBuilder().token(TOKEN).build()
 
+    # Handlers
     app.add_handler(CommandHandler("start", start))
 
     conv_handler = ConversationHandler(
@@ -701,7 +716,7 @@ def main():
             ROL: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_rol)],
             ESTATURA: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_estatura)],
         },
-        fallbacks=[]
+        fallbacks=[CommandHandler("cancelar", start)]
     )
     app.add_handler(conv_handler)
 
@@ -721,10 +736,35 @@ def main():
     app.add_handler(CommandHandler("admin_limpiar_sugerencias", admin_limpiar_sugerencias_cmd))
 
     app.add_handler(CommandHandler("miid", miid))
-
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_message))
 
-    app.run_polling()
+    # Servidor web para Railway
+    async def start_server():
+        web_app = web.Application()
+        web_app["bot_app"] = app
+        web_app.router.add_get("/", health_check)
+        web_app.router.add_post(f"/{TOKEN}", webhook_handler)
+        
+        runner = web.AppRunner(web_app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", PORT)
+        await site.start()
+        logger.info(f"Servidor escuchando en puerto {PORT}")
+
+        # Configurar webhook
+        if WEBHOOK_URL:
+            await setup_webhook(app, TOKEN, f"{WEBHOOK_URL}/{TOKEN}")
+
+    # Inicializar y ejecutar
+    async def run():
+        await app.initialize()
+        await app.start()
+        await start_server()
+        # Mantener vivo
+        while True:
+            await asyncio.sleep(3600)
+
+    asyncio.run(run())
 
 if __name__ == "__main__":
     main()
