@@ -28,7 +28,7 @@ SUGERENCIAS_FILE = "sugerencias.json"
 
 ADMIN_ID = 8400361723  # tu ID de administrador
 TOKEN = "8197198334:AAHAdN7eVyCx-16tgxaX0-Sw9--IJwXCznQ"  # ← PON AQUÍ TU TOKEN REAL
-CANAL_ID = -8400361732  # ← pon aquí el ID real del canal
+CANAL_ID = -3930339025  # ← pon aquí el ID real del canal
 
 # ------------------------------
 #   UTILIDADES JSON
