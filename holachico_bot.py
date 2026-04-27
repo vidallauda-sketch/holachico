@@ -27,8 +27,8 @@ CHATS_FILE = "chats.json"
 SUGERENCIAS_FILE = "sugerencias.json"
 
 ADMIN_ID = 8400361723  # tu ID de administrador
-TOKEN = "8197198334:AAHAdN7eVyCx-16tgxaX0-Sw9--IJwXCznQ"  # ← PON AQUÍ TU TOKEN REAL
-CANAL_ID = -3930339025  # ← pon aquí el ID real del canal
+TOKEN = "8197198334:AAHHxsA_4DfQgjF1Cy3Fz8UR4F_kiycJ5QM"  # ← tu token real
+CANAL_ID = -1000000000000  # ← PON AQUÍ EL ID REAL DEL CANAL
 
 # ------------------------------
 #   UTILIDADES JSON
@@ -120,8 +120,14 @@ async def perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return FOTO
 
 async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file_id = update.message.photo[-1].file_id
-    context.user_data.setdefault("fotos", []).append(file_id)
+    photo = update.message.photo[-1]
+    file_id = photo.file_id
+
+    # Intentar asegurar un file_id reutilizable
+    file = await context.bot.get_file(file_id)
+    real_id = file.file_id
+
+    context.user_data.setdefault("fotos", []).append(real_id)
     await update.message.reply_text("📸 Foto añadida. Envía otra o escribe /listo.")
     return FOTO
 
@@ -185,6 +191,19 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo=p["fotos"][0],
         caption=texto,
         parse_mode="Markdown"
+    )
+
+    # Preguntar si quiere aparecer en el canal
+    botones = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Sí, publicar en el canal", callback_data="publicar_si"),
+            InlineKeyboardButton("No, gracias", callback_data="publicar_no"),
+        ]
+    ])
+
+    await update.message.reply_text(
+        "¿Quieres que tu perfil aparezca en el canal público de HolaChico?",
+        reply_markup=botones
     )
 
     return ConversationHandler.END
@@ -680,10 +699,49 @@ async def miid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Tu ID es: {user_id}")
 
 # ------------------------------
-#   MAIN
+#   PUBLICAR PERFIL EN CANAL
 # ------------------------------
 
+async def publicar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = str(query.from_user.id)
+    perfiles = cargar_perfiles()
+
+    if user_id not in perfiles:
+        await query.edit_message_text("No he encontrado tu perfil. Crea uno con /perfil.")
+        return
+
+    p = perfiles[user_id]
+
+    if query.data == "publicar_no":
+        await query.edit_message_text("Perfecto, tu perfil no será publicado en el canal.")
+        return
+
+    texto = (
+        f"📸 *Nuevo perfil en HolaChico*\n\n"
+        f"Edad: {p['edad']}\n"
+        f"Ciudad: {p['ciudad']}\n"
+        f"Busca: {p['busca']}\n"
+        f"Descripción: {p['descripcion']}\n"
+        f"Rol: {p['rol']}\n"
+        f"Estatura: {p['estatura']}\n\n"
+        f"👉 tg://user?id={user_id}"
     )
+
+    await context.application.bot.send_photo(
+        chat_id=CANAL_ID,
+        photo=p["fotos"][0],
+        caption=texto,
+        parse_mode="Markdown"
+    )
+
+    await query.edit_message_text("Tu perfil ha sido publicado en el canal 🎉")
+
+# ------------------------------
+#   MAIN
+# ------------------------------
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -710,6 +768,7 @@ def main():
 
     app.add_handler(CommandHandler("ver", ver))
     app.add_handler(CallbackQueryHandler(galeria_callback, pattern="^foto_"))
+    app.add_handler(CallbackQueryHandler(publicar_callback, pattern="^publicar_"))
     app.add_handler(CallbackQueryHandler(botones))
 
     app.add_handler(CommandHandler("likes", likes_cmd))
