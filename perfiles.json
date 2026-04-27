@@ -1,29 +1,29 @@
 {
-    "1843742910": {
-        "foto": "AgACAgEAAxkBAAMzae9GWjdX2t1Y2ZVxuy4VBtVO_t4AAkcMaxutGXlHachyJ_jUPnsBAAMCAAN4AAM7BA",
-        "edad": "38",
-        "ciudad": "La Habana",
-        "busca": "Todo",
-        "descripcion": "Ahora mismo no sé qué decir pero aquí estoy",
-        "rol": "No es importante",
-        "estatura": "1.68"
-    },
-    "7697989327": {
-        "foto": "AgACAgEAAxkBAANVae9PGMYBA5O2fbBrwD260dpyGk0AAosMaxsdGIBH7kQ2XmE9AAFSAQADAgADeQADOwQ",
-        "edad": "33",
-        "ciudad": "La Habana",
-        "busca": "Amigos, relación  sexo,charlar",
-        "descripcion": "Versátil varonil",
-        "rol": "Inter",
-        "estatura": "1.78"
-    },
-    "6742679204": {
-        "foto": "AgACAgEAAxkBAANpae9PfkXbfEtNiz6l1AABkHKQjEhkAAIUDWsb4O54R7KAUBMZ83TsAQADAgADeQADOwQ",
-        "edad": "34",
-        "ciudad": "La habana, cerro",
-        "busca": "Relación y sexo",
-        "descripcion": "Hola chico tranquilo de casa, trabajador y enfocado",
-        "rol": "Inter activo",
-        "estatura": "1.80"
-    }
+  "1843742910": {
+    "fotos": ["AgACAgEAAxkBAAMzae9GWjdX2t1Y2ZVxuy4VBtVO_t4AAkcMaxutGXlHachyJ_jUPnsBAAMCAAN4AAM7BA"],
+    "edad": "38",
+    "ciudad": "La Habana",
+    "busca": "Todo",
+    "descripcion": "Ahora mismo no sé qué decir pero aquí estoy",
+    "rol": "No es importante",
+    "estatura": "1.68"
+  },
+  "7697989327": {
+    "fotos": ["AgACAgEAAxkBAANVae9PGMYBA5O2fbBrwD260dpyGk0AAosMaxsdGIBH7kQ2XmE9AAFSAQADAgADeQADOwQ"],
+    "edad": "33",
+    "ciudad": "La Habana",
+    "busca": "Amigos, relación  sexo,charlar",
+    "descripcion": "Versátil varonil",
+    "rol": "Inter",
+    "estatura": "1.78"
+  },
+  "6742679204": {
+    "fotos": ["AgACAgEAAxkBAANpae9PfkXbfEtNiz6l1AABkHKQjEhkAAIUDWsb4O54R7KAUBMZ83TsAQADAgADeQADOwQ"],
+    "edad": "34",
+    "ciudad": "La habana, cerro",
+    "busca": "Relación y sexo",
+    "descripcion": "Hola chico tranquilo de casa, trabajador y enfocado",
+    "rol": "Inter activo",
+    "estatura": "1.80"
+  }
 }
