@@ -21,10 +21,10 @@ from telegram.ext import (
 #   CONFIGURACIÓN
 # ------------------------------
 
-PERFILES_FILE = "perfiles.json"
-LIKES_FILE = "likes.json"
-CHATS_FILE = "chats.json"
-SUGERENCIAS_FILE = "sugerencias.json"
+PERFILES_FILE = "data/perfiles.json"
+LIKES_FILE = "data/likes.json"
+CHATS_FILE = "data/chats.json"
+SUGERENCIAS_FILE = "data/sugerencias.json"
 
 ADMIN_ID = "8400361723"  # tu ID de administrador
 TOKEN = "8197198334:AAHAdN7eVyCx-16tgxaX0-Sw9--IJwXCznQ"  # ← tu token real
