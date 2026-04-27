@@ -249,7 +249,13 @@ async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = construir_texto_perfil(p)
 
-    fotos = p.get("fotos", [])
+    # Aceptar ambos formatos: "foto" (viejo) y "fotos" (nuevo)
+if "fotos" in p:
+    fotos = p["fotos"]
+elif "foto" in p:
+    fotos = [p["foto"]]
+else:
+    fotos = []
     if not fotos:
         await update.message.reply_text("Este perfil no tiene fotos.")
         return
@@ -288,7 +294,13 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = ids[indice]
     p = perfiles[user_id]
 
-    fotos = p.get("fotos", [])
+    # Aceptar ambos formatos: "foto" (viejo) y "fotos" (nuevo)
+if "fotos" in p:
+    fotos = p["fotos"]
+elif "foto" in p:
+    fotos = [p["foto"]]
+else:
+    fotos = []
     if not fotos:
         return
 
@@ -347,7 +359,13 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         texto = construir_texto_perfil(p)
 
-        fotos = p.get("fotos", [])
+        # Aceptar ambos formatos: "foto" (viejo) y "fotos" (nuevo)
+if "fotos" in p:
+    fotos = p["fotos"]
+elif "foto" in p:
+    fotos = [p["foto"]]
+else:
+    fotos = []
         if not fotos:
             await query.message.reply_text("Este perfil no tiene fotos.")
             return
