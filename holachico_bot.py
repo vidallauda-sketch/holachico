@@ -769,7 +769,7 @@ def main():
     app.add_handler(CommandHandler("ver", ver))
     app.add_handler(CallbackQueryHandler(galeria_callback, pattern="^foto_"))
     app.add_handler(CallbackQueryHandler(publicar_callback, pattern="^publicar_"))
-    app.add_handler(CallbackQueryHandler(botones))
+    app.add_handler(CallbackQueryHandler(botones, pattern="^(like_|contactar_|siguiente|foto_)"))
 
     app.add_handler(CommandHandler("likes", likes_cmd))
     app.add_handler(CommandHandler("matches", matches_cmd))
