@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 PORT = int(os.getenv("PORT", "8080"))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Ej: https://tu-app.railway.app
-
+WEBHOOK_URL = os.getenv("holachico-production.up.railway.app") 
 if not TOKEN:
     raise ValueError("❌ BOT_TOKEN no está configurado")
 
