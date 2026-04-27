@@ -439,7 +439,11 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
         await query.message.reply_text(
-            f"Hemos avisado a esa persona. También puedes intentar escribirle aquí:\n👉 tg://user?id={target_id}"
+            f"Hemos avisado a esa persona.\n\n"
+f"👉 tg://user?id={target_id}\n\n"
+f"⚠️ Si el enlace no abre, es porque esta persona solo permite mensajes de sus contactos. "
+f"Cuando tengáis *match*, podréis hablar con /chat."
+
         )
         return
 
