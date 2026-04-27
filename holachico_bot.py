@@ -486,8 +486,11 @@ async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=int(target_id),
             text="💬 Alguien abrió chat contigo. Usa /cerrarchat para cerrar."
         )
-    except Exception:
-        pass
+    except
+
+# ==============================
+#   CERRAR CHAT
+# ==============================
 
 async def cerrarchat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -513,6 +516,10 @@ async def cerrarchat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
+# ==============================
+#   MENSAJES EN CHAT
+# ==============================
+
 async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     chats = await cargar_chats()
@@ -532,7 +539,7 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error enviando mensaje: {e}")
 
 # ==============================
-#   BORRAR
+#   BORRAR PERFIL
 # ==============================
 
 async def borrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -662,7 +669,6 @@ async def health_check(request):
     return web.Response(text="OK", status=200)
 
 async def webhook_handler(request):
-    """Recibe actualizaciones de Telegram"""
     try:
         bot_app = request.app["bot_app"]
         data = await request.json()
@@ -674,7 +680,6 @@ async def webhook_handler(request):
         return web.Response(text="Error", status=500)
 
 async def main():
-    # Crear aplicación Telegram
     application = ApplicationBuilder().token(TOKEN).build()
 
     # Handlers
@@ -727,7 +732,7 @@ async def main():
         await application.bot.set_webhook(url=full_url)
         logger.info(f"Webhook configurado: {full_url}")
 
-    # Crear servidor web
+    # Servidor web
     web_app = web.Application()
     web_app["bot_app"] = application
     web_app.router.add_get("/", health_check)
