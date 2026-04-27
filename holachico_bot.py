@@ -27,7 +27,7 @@ CHATS_FILE = "chats.json"
 SUGERENCIAS_FILE = "sugerencias.json"
 
 ADMIN_ID = 8400361723  # tu ID de administrador
-TOKEN = "8197198334:AAHHxsA_4DfQgjF1Cy3Fz8UR4F_kiycJ5QM"  # ← PON AQUÍ TU TOKEN REAL
+TOKEN = "8197198334:AAHAdN7eVyCx-16tgxaX0-Sw9--IJwXCznQ"  # ← PON AQUÍ TU TOKEN REAL
 
 # ------------------------------
 #   UTILIDADES JSON
