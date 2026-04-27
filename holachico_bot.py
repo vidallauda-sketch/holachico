@@ -27,7 +27,7 @@ CHATS_FILE = "chats.json"
 SUGERENCIAS_FILE = "sugerencias.json"
 
 ADMIN_ID = 8400361723  # tu ID de administrador
-TOKEN = "AQUI_TU_TOKEN_REAL"  # ← PON AQUÍ TU TOKEN REAL
+TOKEN = "8197198334:AAHHxsA_4DfQgjF1Cy3Fz8UR4F_kiycJ5QM"  # ← PON AQUÍ TU TOKEN REAL
 
 # ------------------------------
 #   UTILIDADES JSON
@@ -552,3 +552,179 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception:
         pass
+
+# ------------------------------
+#   BORRAR PERFIL
+# ------------------------------
+
+async def borrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    perfiles = cargar_perfiles()
+    likes = cargar_likes()
+    chats = cargar_chats()
+
+    eliminado = False
+
+    if user_id in perfiles:
+        del perfiles[user_id]
+        guardar_perfiles(perfiles)
+        eliminado = True
+
+    if user_id in likes:
+        del likes[user_id]
+        guardar_likes(likes)
+        eliminado = True
+
+    if user_id in chats:
+        partner_id = chats[user_id]
+        if partner_id in chats:
+            del chats[partner_id]
+        del chats[user_id]
+        guardar_chats(chats)
+        eliminado = True
+
+    if eliminado:
+        await update.message.reply_text("🗑️ Tu perfil e interacciones han sido eliminados.")
+    else:
+        await update.message.reply_text("No tenías perfil ni interacciones guardadas.")
+
+# ------------------------------
+#   SUGERENCIAS Y ADMIN
+# ------------------------------
+
+async def sugerencia_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if not context.args:
+        await update.message.reply_text("Usa /sugerencia <texto> para enviar una sugerencia.")
+        return
+
+    texto = " ".join(context.args)
+
+    sugerencias = cargar_sugerencias()
+    lista = sugerencias.get("sugerencias", [])
+    lista.append({"user_id": user_id, "texto": texto})
+    sugerencias["sugerencias"] = lista
+    guardar_sugerencias(sugerencias)
+
+    await update.message.reply_text("✅ Gracias por tu sugerencia.")
+
+    try:
+        await context.application.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"💡 Nueva sugerencia de {user_id}:\n\n{texto}"
+        )
+    except Exception:
+        pass
+
+async def admin_broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso para usar este comando.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usa /admin_broadcast <mensaje> para enviar un aviso a todos los usuarios.")
+        return
+
+    mensaje = " ".join(context.args)
+    perfiles = cargar_perfiles()
+    enviados = 0
+
+    for uid in perfiles.keys():
+        try:
+            await context.application.bot.send_message(
+                chat_id=int(uid),
+                text=f"📢 Aviso del administrador:\n\n{mensaje}"
+            )
+            enviados += 1
+        except Exception:
+            continue
+
+    await update.message.reply_text(f"Mensaje enviado a {enviados} usuarios.")
+
+async def admin_sugerencias_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso para usar este comando.")
+        return
+
+    sugerencias = cargar_sugerencias()
+    lista = sugerencias.get("sugerencias", [])
+
+    if not lista:
+        await update.message.reply_text("No hay sugerencias pendientes.")
+        return
+
+    texto = "💡 *Sugerencias recibidas:*\n\n"
+    for s in lista:
+        texto += f"- De {s['user_id']}: {s['texto']}\n"
+
+    await update.message.reply_text(texto, parse_mode="Markdown")
+
+async def admin_limpiar_sugerencias_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso para usar este comando.")
+        return
+
+    guardar_sugerencias({"sugerencias": []})
+    await update.message.reply_text("🧹 Sugerencias limpiadas.")
+
+# ------------------------------
+#   /miid (para depuración)
+# ------------------------------
+
+async def miid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"Tu ID es: {user_id}")
+
+# ------------------------------
+#   MAIN
+# ------------------------------
+
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("perfil", perfil)],
+        states={
+            FOTO: [
+                MessageHandler(filters.PHOTO, recibir_foto),
+                CommandHandler("listo", fotos_listas),
+            ],
+            EDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_edad)],
+            CIUDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ciudad)],
+            BUSCA: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_busca)],
+            DESCRIPCION: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_descripcion)],
+            ROL: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_rol)],
+            ESTATURA: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_estatura)],
+        },
+        fallbacks=[]
+    )
+    app.add_handler(conv_handler)
+
+    app.add_handler(CommandHandler("ver", ver))
+    app.add_handler(CallbackQueryHandler(galeria_callback, pattern="^foto_"))
+    app.add_handler(CallbackQueryHandler(botones))
+
+    app.add_handler(CommandHandler("likes", likes_cmd))
+    app.add_handler(CommandHandler("matches", matches_cmd))
+    app.add_handler(CommandHandler("chat", chat_cmd))
+    app.add_handler(CommandHandler("cerrarchat", cerrarchat_cmd))
+    app.add_handler(CommandHandler("borrar", borrar))
+
+    app.add_handler(CommandHandler("sugerencia", sugerencia_cmd))
+    app.add_handler(CommandHandler("admin_broadcast", admin_broadcast_cmd))
+    app.add_handler(CommandHandler("admin_sugerencias", admin_sugerencias_cmd))
+    app.add_handler(CommandHandler("admin_limpiar_sugerencias", admin_limpiar_sugerencias_cmd))
+
+    app.add_handler(CommandHandler("miid", miid))
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_message))
+
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
