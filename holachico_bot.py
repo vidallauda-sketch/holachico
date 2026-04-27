@@ -542,4 +542,13 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in chats:
         return
 
-    partner
+    partner_id = chats[user_id]
+    texto = update.message.text
+
+    try:
+        await context.application.bot.send_message(
+            chat_id=int(partner_id),
+            text=f"📩 {texto}"
+        )
+    except Exception:
+        pass
