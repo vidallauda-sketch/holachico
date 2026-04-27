@@ -1,0 +1,10 @@
+[tool.poetry]
+name = "holachico"
+version = "0.1.0"
+description = ""
+authors = ["Henry"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+python-telegram-bot = "20.7"
+aiohttp = "*"
