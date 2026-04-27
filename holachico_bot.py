@@ -485,7 +485,9 @@ async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=int(target_id),
             text="💬 Alguien abrió chat contigo. Usa /cerrarchat para cerrar."
         )
-    except
+    except:
+    pass
+
 
 # ==============================
 #   CERRAR CHAT
