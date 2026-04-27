@@ -1,6 +1,12 @@
 import json
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+)
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -12,63 +18,65 @@ from telegram.ext import (
 )
 
 # ------------------------------
-#   ARCHIVOS
+#   CONFIGURACIÓN
 # ------------------------------
 
 PERFILES_FILE = "perfiles.json"
 LIKES_FILE = "likes.json"
 CHATS_FILE = "chats.json"
+SUGERENCIAS_FILE = "sugerencias.json"
 
+ADMIN_ID = 8400361723  # tu ID de administrador
+TOKEN = os.getenv("BOT_TOKEN")  # define BOT_TOKEN en Railway
+
+# ------------------------------
+#   UTILIDADES JSON
+# ------------------------------
+
+def cargar_json(ruta):
+    if not os.path.exists(ruta):
+        return {}
+    with open(ruta, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return {}
+
+def guardar_json(ruta, datos):
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(datos, f, ensure_ascii=False, indent=2)
+
+# ------------------------------
+#   ARCHIVOS
+# ------------------------------
 
 def cargar_perfiles():
-    if os.path.exists(PERFILES_FILE):
-        with open(PERFILES_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-    return {}
-
+    return cargar_json(PERFILES_FILE)
 
 def guardar_perfiles(perfiles):
-    with open(PERFILES_FILE, "w", encoding="utf-8") as f:
-        json.dump(perfiles, f, ensure_ascii=False, indent=4)
-
+    guardar_json(PERFILES_FILE, perfiles)
 
 def cargar_likes():
-    if os.path.exists(LIKES_FILE):
-        with open(LIKES_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-    return {}
-
+    return cargar_json(LIKES_FILE)
 
 def guardar_likes(likes):
-    with open(LIKES_FILE, "w", encoding="utf-8") as f:
-        json.dump(likes, f, ensure_ascii=False, indent=4)
+    guardar_json(LIKES_FILE, likes)
 
+def cargar_chats():
+    return cargar_json(CHATS_FILE)
+
+def guardar_chats(chats):
+    guardar_json(CHATS_FILE, chats)
+
+def cargar_sugerencias():
+    return cargar_json(SUGERENCIAS_FILE)
+
+def guardar_sugerencias(sugerencias):
+    guardar_json(SUGERENCIAS_FILE, sugerencias)
 
 def asegurar_usuario_en_likes(likes, user_id):
     if user_id not in likes:
         likes[user_id] = {"dados": [], "recibidos": []}
-
-
-def cargar_chats():
-    if os.path.exists(CHATS_FILE):
-        with open(CHATS_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-    return {}
-
-
-def guardar_chats(chats):
-    with open(CHATS_FILE, "w", encoding="utf-8") as f:
-        json.dump(chats, f, ensure_ascii=False, indent=4)
-
 
 # ------------------------------
 #   ESTADOS DEL PERFIL
@@ -91,7 +99,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /matches – ver tus matches\n"
         "• /chat <id> – abrir chat con un match\n"
         "• /cerrarchat – cerrar el chat actual\n"
-        "• /borrar – eliminar tu perfil e interacciones\n\n"
+        "• /borrar – eliminar tu perfil e interacciones\n"
+        "• /sugerencia <texto> – enviar sugerencia al admin\n\n"
         "Disfruta y conecta con respeto. 💬",
         parse_mode="Markdown"
     )
@@ -101,33 +110,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ------------------------------
 
 async def perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📸 Envíame una *foto* para tu perfil.", parse_mode="Markdown")
+    context.user_data["fotos"] = []
+    await update.message.reply_text(
+        "📸 Envíame *todas las fotos que quieras* para tu perfil.\n"
+        "Cuando termines, escribe /listo.",
+        parse_mode="Markdown"
+    )
     return FOTO
 
-
 async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["foto"] = update.message.photo[-1].file_id
+    file_id = update.message.photo[-1].file_id
+    if "fotos" not in context.user_data:
+        context.user_data["fotos"] = []
+    context.user_data["fotos"].append(file_id)
+    await update.message.reply_text("📸 Foto añadida. Envía otra o escribe /listo.")
+    return FOTO
+
+async def fotos_listas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "fotos" not in context.user_data or not context.user_data["fotos"]:
+        await update.message.reply_text("Necesitas enviar al menos una foto antes de seguir.")
+        return FOTO
+
     await update.message.reply_text("📅 ¿Qué *edad* tienes?", parse_mode="Markdown")
     return EDAD
-
 
 async def recibir_edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["edad"] = update.message.text
     await update.message.reply_text("📍 ¿En qué *ciudad* estás?", parse_mode="Markdown")
     return CIUDAD
 
-
 async def recibir_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["ciudad"] = update.message.text
     await update.message.reply_text("💘 ¿Qué *buscas*? (amigos, relación, charlar…)", parse_mode="Markdown")
     return BUSCA
 
-
 async def recibir_busca(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["busca"] = update.message.text
     await update.message.reply_text("📝 Escribe una *descripción* sobre ti.", parse_mode="Markdown")
     return DESCRIPCION
-
 
 async def recibir_descripcion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["descripcion"] = update.message.text
@@ -138,12 +158,10 @@ async def recibir_descripcion(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     return ROL
 
-
 async def recibir_rol(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["rol"] = update.message.text
     await update.message.reply_text("📏 ¿Cuál es tu *estatura*? (ej: 1.78)", parse_mode="Markdown")
     return ESTATURA
-
 
 async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["estatura"] = update.message.text
@@ -165,7 +183,7 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_photo(
-        photo=p["foto"],
+        photo=p["fotos"][0],
         caption=texto,
         parse_mode="Markdown"
     )
@@ -173,7 +191,7 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # ------------------------------
-#   VER PERFILES
+#   VER PERFILES + GALERÍA
 # ------------------------------
 
 def construir_texto_perfil(p):
@@ -185,7 +203,6 @@ def construir_texto_perfil(p):
         f"Rol: {p['rol']}\n"
         f"Estatura: {p['estatura']}"
     )
-
 
 async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     perfiles = cargar_perfiles()
@@ -201,9 +218,9 @@ async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["lista_perfiles"] = ids
     context.user_data["indice"] = 0
+    context.user_data["foto_index"] = 0
 
     await mostrar_perfil(update, context)
-
 
 async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     perfiles = cargar_perfiles()
@@ -214,7 +231,19 @@ async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = construir_texto_perfil(p)
 
+    fotos = p.get("fotos", [])
+    foto = fotos[0] if fotos else None
+    if not foto:
+        await update.message.reply_text("Este perfil no tiene fotos.")
+        return
+
+    context.user_data["foto_index"] = 0
+
     botones = [
+        [
+            InlineKeyboardButton("⬅️", callback_data="foto_prev"),
+            InlineKeyboardButton("➡️", callback_data="foto_next")
+        ],
         [
             InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
             InlineKeyboardButton("💬 Contactar", callback_data=f"contactar_{user_id}")
@@ -223,8 +252,54 @@ async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_photo(
-        photo=p["foto"],
+        photo=foto,
         caption=texto,
+        reply_markup=InlineKeyboardMarkup(botones)
+    )
+
+async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    perfiles = cargar_perfiles()
+    ids = context.user_data.get("lista_perfiles", [])
+    indice = context.user_data.get("indice", 0)
+
+    if not ids:
+        return
+
+    user_id = ids[indice]
+    p = perfiles[user_id]
+
+    fotos = p.get("fotos", [])
+    if not fotos:
+        return
+
+    foto_index = context.user_data.get("foto_index", 0)
+
+    if query.data == "foto_next":
+        foto_index = (foto_index + 1) % len(fotos)
+    elif query.data == "foto_prev":
+        foto_index = (foto_index - 1) % len(fotos)
+
+    context.user_data["foto_index"] = foto_index
+
+    texto = construir_texto_perfil(p)
+
+    botones = [
+        [
+            InlineKeyboardButton("⬅️", callback_data="foto_prev"),
+            InlineKeyboardButton("➡️", callback_data="foto_next")
+        ],
+        [
+            InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
+            InlineKeyboardButton("💬 Contactar", callback_data=f"contactar_{user_id}")
+        ],
+        [InlineKeyboardButton("➡️ Siguiente", callback_data="siguiente")]
+    ]
+
+    await query.edit_message_media(
+        media=InputMediaPhoto(fotos[foto_index], caption=texto),
         reply_markup=InlineKeyboardMarkup(botones)
     )
 
@@ -255,7 +330,19 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         texto = construir_texto_perfil(p)
 
-        botones = [
+        fotos = p.get("fotos", [])
+        foto = fotos[0] if fotos else None
+        if not foto:
+            await query.message.reply_text("Este perfil no tiene fotos.")
+            return
+
+        context.user_data["foto_index"] = 0
+
+        botones_kb = [
+            [
+                InlineKeyboardButton("⬅️", callback_data="foto_prev"),
+                InlineKeyboardButton("➡️", callback_data="foto_next")
+            ],
             [
                 InlineKeyboardButton("❤️ Me gusta", callback_data=f"like_{user_id}"),
                 InlineKeyboardButton("💬 Contactar", callback_data=f"contactar_{user_id}")
@@ -264,9 +351,9 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
 
         await query.message.reply_photo(
-            photo=p["foto"],
+            photo=foto,
             caption=texto,
-            reply_markup=InlineKeyboardMarkup(botones)
+            reply_markup=InlineKeyboardMarkup(botones_kb)
         )
         return
 
@@ -282,7 +369,6 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         guardar_likes(likes)
 
-        # Notificar al otro usuario que alguien le dio like
         try:
             await context.application.bot.send_message(
                 chat_id=int(target_id),
@@ -292,7 +378,6 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-        # Comprobar si hay match
         if from_id in likes[target_id]["dados"]:
             nombre_from = query.from_user.first_name or "Alguien"
             try:
@@ -319,7 +404,7 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # CONTACTAR (aviso directo)
+    # CONTACTAR
     if data.startswith("contactar_"):
         target_id = data.split("_")[1]
         nombre_from = query.from_user.first_name or "Alguien"
@@ -362,7 +447,6 @@ async def likes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(texto, parse_mode="Markdown")
 
-
 async def matches_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     likes = cargar_likes()
@@ -383,7 +467,7 @@ async def matches_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(texto, parse_mode="Markdown")
 
 # ------------------------------
-#   CHAT PRIVADO: /chat y /cerrarchat
+#   CHAT PRIVADO
 # ------------------------------
 
 async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -400,7 +484,6 @@ async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     target_id = context.args[0]
 
-    # Comprobar que hay match mutuo
     dados = set(likes[user_id]["dados"])
     recibidos = set(likes[user_id]["recibidos"])
     matches = dados & recibidos
@@ -423,11 +506,14 @@ async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.application.bot.send_message(
             chat_id=int(target_id),
-            text="💬 Alguien ha abierto un chat privado contigo. Todo lo que escribas aquí se enviará a esa persona.\nUsa /cerrarchat para cerrar el chat."
+            text=(
+                "💬 Alguien ha abierto un chat privado contigo. "
+                "Todo lo que escribas aquí se enviará a esa persona.\n"
+                "Usa /cerrarchat para cerrar el chat."
+            )
         )
     except Exception:
         pass
-
 
 async def cerrarchat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -438,7 +524,6 @@ async def cerrarchat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     partner_id = chats[user_id]
-    # borrar ambos lados
     if partner_id in chats:
         del chats[partner_id]
     del chats[user_id]
@@ -454,13 +539,12 @@ async def cerrarchat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-
 async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     chats = cargar_chats()
 
     if user_id not in chats:
-        return  # mensaje normal, no está en chat activo
+        return
 
     partner_id = chats[user_id]
     texto = update.message.text
@@ -509,12 +593,103 @@ async def borrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No tenías perfil ni interacciones guardadas.")
 
 # ------------------------------
-#   TOKEN Y MAIN
+#   SUGERENCIAS Y ADMIN
 # ------------------------------
 
-TOKEN = "8197198334:AAHHxsA_4DfQgjF1Cy3Fz8UR4F_kiycJ5QM"  # pon aquí tu token real
+async def sugerencia_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if not context.args:
+        await update.message.reply_text("Usa /sugerencia <texto> para enviar una sugerencia.")
+        return
+
+    texto = " ".join(context.args)
+
+    sugerencias = cargar_sugerencias()
+    lista = sugerencias.get("sugerencias", [])
+    lista.append({"user_id": user_id, "texto": texto})
+    sugerencias["sugerencias"] = lista
+    guardar_sugerencias(sugerencias)
+
+    await update.message.reply_text("✅ Gracias por tu sugerencia.")
+
+    try:
+        await context.application.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"💡 Nueva sugerencia de {user_id}:\n\n{texto}"
+        )
+    except Exception:
+        pass
+
+async def admin_broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso para usar este comando.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usa /admin_broadcast <mensaje> para enviar un aviso a todos los usuarios.")
+        return
+
+    mensaje = " ".join(context.args)
+    perfiles = cargar_perfiles()
+    enviados = 0
+
+    for uid in perfiles.keys():
+        try:
+            await context.application.bot.send_message(
+                chat_id=int(uid),
+                text=f"📢 Aviso del administrador:\n\n{mensaje}"
+            )
+            enviados += 1
+        except Exception:
+            continue
+
+    await update.message.reply_text(f"Mensaje enviado a {enviados} usuarios.")
+
+async def admin_sugerencias_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso para usar este comando.")
+        return
+
+    sugerencias = cargar_sugerencias()
+    lista = sugerencias.get("sugerencias", [])
+
+    if not lista:
+        await update.message.reply_text("No hay sugerencias pendientes.")
+        return
+
+    texto = "💡 *Sugerencias recibidas:*\n\n"
+    for s in lista:
+        texto += f"- De {s['user_id']}: {s['texto']}\n"
+
+    await update.message.reply_text(texto, parse_mode="Markdown")
+
+async def admin_limpiar_sugerencias_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("No tienes permiso para usar este comando.")
+        return
+
+    guardar_sugerencias({"sugerencias": []})
+    await update.message.reply_text("🧹 Sugerencias limpiadas.")
+
+# ------------------------------
+#   /miid (para depuración)
+# ------------------------------
+
+async def miid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"Tu ID es: {user_id}")
+
+# ------------------------------
+#   MAIN
+# ------------------------------
 
 def main():
+    if not TOKEN:
+        raise RuntimeError("BOT_TOKEN no está definido en las variables de entorno.")
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -522,7 +697,10 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("perfil", perfil)],
         states={
-            FOTO: [MessageHandler(filters.PHOTO, recibir_foto)],
+            FOTO: [
+                MessageHandler(filters.PHOTO, recibir_foto),
+                CommandHandler("listo", fotos_listas),
+            ],
             EDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_edad)],
             CIUDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ciudad)],
             BUSCA: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_busca)],
@@ -535,14 +713,22 @@ def main():
     app.add_handler(conv_handler)
 
     app.add_handler(CommandHandler("ver", ver))
+    app.add_handler(CallbackQueryHandler(galeria_callback, pattern="^foto_"))
     app.add_handler(CallbackQueryHandler(botones))
+
     app.add_handler(CommandHandler("likes", likes_cmd))
     app.add_handler(CommandHandler("matches", matches_cmd))
     app.add_handler(CommandHandler("chat", chat_cmd))
     app.add_handler(CommandHandler("cerrarchat", cerrarchat_cmd))
     app.add_handler(CommandHandler("borrar", borrar))
 
-    # Relay de mensajes cuando hay chat activo
+    app.add_handler(CommandHandler("sugerencia", sugerencia_cmd))
+    app.add_handler(CommandHandler("admin_broadcast", admin_broadcast_cmd))
+    app.add_handler(CommandHandler("admin_sugerencias", admin_sugerencias_cmd))
+    app.add_handler(CommandHandler("admin_limpiar_sugerencias", admin_limpiar_sugerencias_cmd))
+
+    app.add_handler(CommandHandler("miid", miid))
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_message))
 
     app.run_polling()
