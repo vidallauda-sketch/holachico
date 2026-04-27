@@ -26,9 +26,9 @@ LIKES_FILE = "data/likes.json"
 CHATS_FILE = "data/chats.json"
 SUGERENCIAS_FILE = "data/sugerencias.json"
 
-ADMIN_ID = "8400361723"  # tu ID de administrador
-TOKEN = "8197198334:AAHAdN7eVyCx-16tgxaX0-Sw9--IJwXCznQ"  # ← tu token real
-CANAL_ID = "-1003930339025"  # ← PON AQUÍ EL ID REAL DEL CANAL
+ADMIN_ID = 8400361723
+TOKEN = "AQUI_TU_TOKEN"
+CANAL_ID = -1002459139025
 
 # ------------------------------
 #   UTILIDADES JSON
@@ -37,15 +37,17 @@ CANAL_ID = "-1003930339025"  # ← PON AQUÍ EL ID REAL DEL CANAL
 def cargar_json(ruta):
     if not os.path.exists(ruta):
         return {}
-    with open(ruta, "r", encoding="utf-8") as f:
-        try:
+    try:
+        with open(ruta, "r", encoding="utf-8") as f:
             return json.load(f)
-        except json.JSONDecodeError:
-            return {}
+    except Exception:
+        return {}
 
 def guardar_json(ruta, datos):
-    with open(ruta, "w", encoding="utf-8") as f:
+    tmp = ruta + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(datos, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, ruta)
 
 # ------------------------------
 #   ARCHIVOS
@@ -123,7 +125,6 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo = update.message.photo[-1]
     file_id = photo.file_id
 
-    # Intentar asegurar un file_id reutilizable
     file = await context.bot.get_file(file_id)
     real_id = file.file_id
 
@@ -177,6 +178,15 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     guardar_perfiles(perfiles)
 
     p = context.user_data
+
+    # Compatibilidad foto/fotos
+    if "fotos" in p:
+        fotos = p["fotos"]
+    elif "foto" in p:
+        fotos = [p["foto"]]
+    else:
+        fotos = []
+
     texto = (
         f"📸 *Tu perfil está listo*\n\n"
         f"Edad: {p['edad']}\n"
@@ -188,12 +198,11 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_photo(
-        photo=p["fotos"][0],
+        photo=fotos[0],
         caption=texto,
         parse_mode="Markdown"
     )
 
-    # Preguntar si quiere aparecer en el canal
     botones = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("Sí, publicar en el canal", callback_data="publicar_si"),
@@ -222,6 +231,14 @@ def construir_texto_perfil(p):
         f"Estatura: {p['estatura']}"
     )
 
+def obtener_fotos(p):
+    """Compatibilidad con formatos viejos y nuevos."""
+    if "fotos" in p:
+        return p["fotos"]
+    if "foto" in p:
+        return [p["foto"]]
+    return []
+
 async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     perfiles = cargar_perfiles()
     ids = list(perfiles.keys())
@@ -248,14 +265,8 @@ async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = perfiles[user_id]
 
     texto = construir_texto_perfil(p)
+    fotos = obtener_fotos(p)
 
-    # Aceptar ambos formatos: "foto" (viejo) y "fotos" (nuevo)
-if "fotos" in p:
-    fotos = p["fotos"]
-elif "foto" in p:
-    fotos = [p["foto"]]
-else:
-    fotos = []
     if not fotos:
         await update.message.reply_text("Este perfil no tiene fotos.")
         return
@@ -293,14 +304,8 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = ids[indice]
     p = perfiles[user_id]
+    fotos = obtener_fotos(p)
 
-    # Aceptar ambos formatos: "foto" (viejo) y "fotos" (nuevo)
-if "fotos" in p:
-    fotos = p["fotos"]
-elif "foto" in p:
-    fotos = [p["foto"]]
-else:
-    fotos = []
     if not fotos:
         return
 
@@ -358,14 +363,8 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
         p = perfiles[user_id]
 
         texto = construir_texto_perfil(p)
+        fotos = obtener_fotos(p)
 
-        # Aceptar ambos formatos: "foto" (viejo) y "fotos" (nuevo)
-if "fotos" in p:
-    fotos = p["fotos"]
-elif "foto" in p:
-    fotos = [p["foto"]]
-else:
-    fotos = []
         if not fotos:
             await query.message.reply_text("Este perfil no tiene fotos.")
             return
@@ -449,7 +448,6 @@ else:
                 text=(
                     f"💬 {nombre_from} quiere contactar contigo.\n"
                     f"Puedes hablar con esta persona si tenéis match usando /chat.\n"
-                    f"También puedes abrir su perfil o usar:\n"
                     f"👉 tg://user?id={from_id}"
                 )
             )
@@ -458,10 +456,9 @@ else:
 
         await query.message.reply_text(
             f"Hemos avisado a esa persona.\n\n"
-f"👉 tg://user?id={target_id}\n\n"
-f"⚠️ Si el enlace no abre, es porque esta persona solo permite mensajes de sus contactos. "
-f"Cuando tengáis *match*, podréis hablar con /chat."
-
+            f"👉 tg://user?id={target_id}\n\n"
+            f"⚠️ Si el enlace no abre, es porque esta persona solo permite mensajes de sus contactos.\n"
+            f"Cuando tengáis *match*, podréis hablar con /chat."
         )
         return
 
@@ -500,7 +497,7 @@ async def matches_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = "🔥 *Tus matches:*\n\n"
     for uid in matches:
-        texto += f"• ID: {uid}  (puedes usar /chat {uid})\n"
+        texto += f"• ID: {uid}  (usa /chat {uid})\n"
 
     await update.message.reply_text(texto, parse_mode="Markdown")
 
@@ -545,7 +542,7 @@ async def chat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.application.bot.send_message(
             chat_id=int(target_id),
             text=(
-                "💬 Alguien ha abierto un chat privado contigo. "
+                "💬 Alguien ha abierto un chat privado contigo.\n"
                 "Todo lo que escribas aquí se enviará a esa persona.\n"
                 "Usa /cerrarchat para cerrar el chat."
             )
@@ -736,6 +733,11 @@ async def publicar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     p = perfiles[user_id]
+    fotos = obtener_fotos(p)
+
+    if not fotos:
+        await query.edit_message_text("Tu perfil no tiene fotos, no puedo publicarlo.")
+        return
 
     if query.data == "publicar_no":
         await query.edit_message_text("Perfecto, tu perfil no será publicado en el canal.")
@@ -752,12 +754,16 @@ async def publicar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👉 tg://user?id={user_id}"
     )
 
-    await context.application.bot.send_photo(
-        chat_id=CANAL_ID,
-        photo=p["fotos"][0],
-        caption=texto,
-        parse_mode="Markdown"
-    )
+    try:
+        await context.application.bot.send_photo(
+            chat_id=CANAL_ID,
+            photo=fotos[0],
+            caption=texto,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        await query.edit_message_text("⚠️ No pude publicar en el canal. Revisa permisos.")
+        return
 
     await query.edit_message_text("Tu perfil ha sido publicado en el canal 🎉")
 
