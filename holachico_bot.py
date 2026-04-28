@@ -240,15 +240,14 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ESTATURA
 
     context.user_data["estatura"] = est
-    # aquí sigue el guardado del perfil
+
+    # Guardar perfil
     user_id = str(update.effective_user.id)
     perfiles = cargar_perfiles()
     perfiles[user_id] = context.user_data.copy()
     guardar_perfiles(perfiles)
 
-    await update.message.reply_text("✅ Tu perfil ha sido guardado.")
-    return ConversationHandler.END
-
+    p = context.user_data
 
     texto = (
         f"📸 *Tu perfil está listo*\n\n"
@@ -279,6 +278,7 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return ConversationHandler.END
+
 
 # ============================================================
 #   TEXTO Y FOTOS DE PERFIL (COMPATIBILIDAD)
