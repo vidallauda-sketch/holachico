@@ -793,8 +793,8 @@ async def publicar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             caption=texto,
             parse_mode="Markdown"
         )
-    except Exception:
-        await query.edit_message_text("⚠️ No pude publicar en el canal. Revisa permisos.")
+    except Exception as e:
+        await query.edit_message_text(f"⚠️ No pude publicar en el canal.\n\nError: {e}")
         return
 
     await query.edit_message_text("Tu perfil ha sido publicado en el canal 🎉")
