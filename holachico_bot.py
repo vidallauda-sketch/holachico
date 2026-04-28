@@ -438,6 +438,24 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(botones)
     )
 
+async def ubicacion_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "ciudad_manual":
+        await query.edit_message_text("📍 ¿En qué ciudad estás?")
+        return
+
+    if query.data == "usar_ubicacion":
+        teclado = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📍 Enviar ubicación", request_location=True)]
+        ])
+
+        await query.edit_message_text(
+            "Pulsa el botón para enviar tu ubicación:",
+            reply_markup=teclado
+        )
+
 # ============================================================
 #   BOTONES: LIKE / CONTACTAR / SIGUIENTE
 # ============================================================
