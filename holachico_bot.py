@@ -534,7 +534,10 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # SIGUIENTE
     if data == "siguiente":
-        context.user_data["indice"] += 1
+       if "indice" not in context.user_data:
+    await query.message.reply_text("❌ Debes usar /ver antes de navegar perfiles.")
+    return
+
 
         if context.user_data["indice"] >= len(context.user_data["lista_perfiles"]):
             await query.message.reply_text("🚫 No hay más perfiles por ahora.")
