@@ -60,8 +60,22 @@ def save_data(path: Path, data: dict):
 def cargar_perfiles():
     return cargar_json(PERFILES_FILE)
 
-def guardar_perfiles(perfiles):
-    guardar_json(PERFILES_FILE, perfiles)
+def guardar_perfil(update, context):
+    user = update.effective_user
+    perfiles = load_data(PERFILES_FILE)
+
+    perfiles[str(user.id)] = {
+        "fotos": context.user_data.get("fotos", []),
+        "edad": context.user_data.get("edad", ""),
+        "ciudad": context.user_data.get("ciudad", ""),
+        "busca": context.user_data.get("busca", ""),
+        "descripcion": context.user_data.get("descripcion", ""),
+        "rol": context.user_data.get("rol", ""),
+        "estatura": context.user_data.get("estatura", ""),
+    }
+
+    save_data(PERFILES_FILE, perfiles)
+    update.message.reply_text("✅ Tu perfil se ha guardado o actualizado.")
 
 def cargar_likes():
     return cargar_json(LIKES_FILE)
