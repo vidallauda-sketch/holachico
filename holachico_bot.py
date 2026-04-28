@@ -266,7 +266,10 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = (
         f"📸 *Tu perfil está listo*\n\n"
-        f"Edad: {p['edad']}\n"
+        if "edad" not in p:
+    await update.message.reply_text("❌ Algo salió mal. Por favor empieza de nuevo con /perfil.")
+    return ConversationHandler.END
+
         f"Ciudad: {p['ciudad']}\n"
         f"Busca: {p['busca']}\n"
         f"Descripción: {p['descripcion']}\n"
@@ -438,6 +441,8 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(botones)
     )
 
+from telegram import KeyboardButton, ReplyKeyboardMarkup
+
 async def ubicacion_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -447,14 +452,22 @@ async def ubicacion_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     if query.data == "usar_ubicacion":
-        teclado = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📍 Enviar ubicación", request_location=True)]
-        ])
+        teclado = ReplyKeyboardMarkup(
+            [[KeyboardButton("📍 Enviar ubicación", request_location=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
 
         await query.edit_message_text(
             "Pulsa el botón para enviar tu ubicación:",
+        )
+
+        await query.message.reply_text(
+            "📍 Envía tu ubicación:",
             reply_markup=teclado
         )
+
+    
 
 import requests
 
