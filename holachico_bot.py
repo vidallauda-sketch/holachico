@@ -99,6 +99,44 @@ def asegurar_usuario_en_likes(likes, user_id):
     if user_id not in likes:
         likes[user_id] = {"dados": [], "recibidos": []}
 
+def iniciar_cambio_fotos(update, context):
+    update.message.reply_text("📷 Envíame ahora tus nuevas fotos. Se reemplazarán las anteriores.")
+    context.user_data["cambiando_fotos"] = True
+    context.user_data["nuevas_fotos"] = []
+
+
+def recibir_foto(update, context):
+    if context.user_data.get("cambiando_fotos"):
+        foto = update.message.photo[-1].file_id
+        lista = context.user_data.get("nuevas_fotos", [])
+        lista.append(foto)
+        context.user_data["nuevas_fotos"] = lista
+        update.message.reply_text("✅ Foto guardada. Envía más o escribe /guardar_fotos cuando termines.")
+
+
+def guardar_fotos(update, context):
+    user = update.effective_user
+    perfiles = load_data(PERFILES_FILE)
+    perfil = perfiles.get(str(user.id))
+
+    if not perfil:
+        update.message.reply_text("❌ No tienes perfil. Usa /perfil primero.")
+        return
+
+    nuevas = context.user_data.get("nuevas_fotos", [])
+    if not nuevas:
+        update.message.reply_text("❌ No has enviado fotos nuevas.")
+        return
+
+    perfil["fotos"] = nuevas
+    perfiles[str(user.id)] = perfil
+    save_data(PERFILES_FILE, perfiles)
+
+    context.user_data["cambiando_fotos"] = False
+    context.user_data["nuevas_fotos"] = []
+    update.message.reply_text("✅ Tus fotos han sido actualizadas.")
+
+
 # ------------------------------
 #   ESTADOS DEL PERFIL
 # ------------------------------
