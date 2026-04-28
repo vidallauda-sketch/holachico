@@ -456,6 +456,51 @@ async def ubicacion_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=teclado
         )
 
+import requests
+
+async def recibir_ubicacion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.location:
+        lat = update.message.location.latitude
+        lon = update.message.location.longitude
+
+        # Reverse geocoding con Nominatim (OpenStreetMap)
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+
+        try:
+            r = requests.get(url, headers={"User-Agent": "HolaChicoBot"})
+            data = r.json()
+
+            ciudad = (
+                data.get("address", {}).get("city") or
+                data.get("address", {}).get("town") or
+                data.get("address", {}).get("village") or
+                data.get("address", {}).get("municipality")
+            )
+
+            if ciudad:
+                context.user_data["ciudad"] = ciudad
+
+                await update.message.reply_text(
+                    f"📍 Ciudad detectada: *{ciudad}*",
+                    parse_mode="Markdown"
+                )
+
+                await update.message.reply_text(
+                    "💘 ¿Qué buscas? (amigos, relación, charlar…)"
+                )
+
+                return BUSCA
+
+        except Exception:
+            pass
+
+        # Si falla la detección:
+        await update.message.reply_text(
+            "❌ No pude detectar tu ciudad automáticamente.\n"
+            "Por favor, escríbela manualmente:"
+        )
+        return CIUDAD
+
 # ============================================================
 #   BOTONES: LIKE / CONTACTAR / SIGUIENTE
 # ============================================================
@@ -884,6 +929,10 @@ def main():
     app.add_handler(CallbackQueryHandler(galeria_callback, pattern="^foto_"))
     app.add_handler(CallbackQueryHandler(publicar_callback, pattern="^publicar_"))
     app.add_handler(CallbackQueryHandler(botones, pattern="^(like_|contactar_|siguiente)"))
+    app.add_handler(CallbackQueryHandler(ubicacion_callback, pattern="^(usar_ubicacion|ciudad_manual)$"))
+
+    # Ubicación
+    app.add_handler(MessageHandler(filters.LOCATION, recibir_ubicacion))
 
     # Chat privado
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_message))
