@@ -180,7 +180,13 @@ async def fotos_listas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return EDAD
 
 async def recibir_edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["edad"] = update.message.text
+    edad = update.message.text.strip()
+
+    if not edad.isdigit() or not (18 <= int(edad) <= 99):
+        await update.message.reply_text("❌ La edad debe ser un número entre 18 y 99.")
+        return EDAD
+
+    context.user_data["edad"] = edad
     await update.message.reply_text("📍 ¿En qué ciudad estás?")
     return CIUDAD
 
@@ -203,19 +209,46 @@ async def recibir_descripcion(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ROL
 
 async def recibir_rol(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["rol"] = update.message.text
+    rol = update.message.text.strip().lower()
+
+    roles_validos = [
+        "activo", "pasivo", "inter",
+        "inter activo", "inter pasivo"
+    ]
+
+    if rol not in roles_validos:
+        await update.message.reply_text(
+            "❌ Rol no válido.\n"
+            "Opciones: activo, pasivo, inter, inter activo, inter pasivo."
+        )
+        return ROL
+
+    context.user_data["rol"] = rol
     await update.message.reply_text("📏 ¿Cuál es tu estatura? (ej: 1.78)")
     return ESTATURA
 
-async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["estatura"] = update.message.text
 
+async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    est = update.message.text.strip().replace(",", ".")
+
+    try:
+        valor = float(est)
+        if not (1.40 <= valor <= 2.20):
+            raise ValueError
+    except:
+        await update.message.reply_text("❌ La estatura debe tener formato como 1.75")
+        return ESTATURA
+
+    context.user_data["estatura"] = est
+    # aquí sigue el guardado del perfil
     user_id = str(update.effective_user.id)
     perfiles = cargar_perfiles()
     perfiles[user_id] = context.user_data.copy()
     guardar_perfiles(perfiles)
 
-    p = context.user_data
+    await update.message.reply_text("✅ Tu perfil ha sido guardado.")
+    return ConversationHandler.END
+
 
     texto = (
         f"📸 *Tu perfil está listo*\n\n"
@@ -412,8 +445,12 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # SIGUIENTE
     if data == "siguiente":
         context.user_data["indice"] += 1
+
         if context.user_data["indice"] >= len(context.user_data["lista_perfiles"]):
+            await query.message.reply_text("🚫 No hay más perfiles por ahora.")
             context.user_data["indice"] = 0
+            return
+
         await mostrar_perfil(query, context)
         return
 
