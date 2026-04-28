@@ -39,20 +39,19 @@ CANAL_ID = -1002459139025
 #   UTILIDADES JSON
 # ------------------------------
 
-def cargar_json(ruta):
-    if not os.path.exists(ruta):
+def load_data(path: Path):
+    if not path.exists():
         return {}
     try:
-        with open(ruta, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
-def guardar_json(ruta, datos):
-    tmp = ruta + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(datos, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, ruta)
+def save_data(path: Path, data: dict):
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 # ------------------------------
 #   ARCHIVOS
