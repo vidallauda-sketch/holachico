@@ -129,6 +129,16 @@ FOTO, EDAD, CIUDAD, BUSCA, DESCRIPCION, ROL, ESTATURA = range(7)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
+        "🔒 *Privacidad y protección de datos*\n\n"
+        "Al usar este bot aceptas que:\n"
+        "• Tus fotos y datos se almacenan localmente para el funcionamiento del servicio.\n"
+        "• Tu perfil puede mostrarse públicamente en el canal si eliges publicarlo.\n"
+        "• Puedes borrar todos tus datos en cualquier momento con /borrar.\n\n"
+        "Cumplimos con los principios de la LOPD y RGPD.\n",
+        parse_mode=\"Markdown\"
+    )
+
+    await update.message.reply_text(
         "🌈 Bienvenido a HolaChico 🌈\n\n"
         "• /perfil – crear o actualizar tu perfil\n"
         "• /miperfil – ver tu perfil\n"
