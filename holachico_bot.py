@@ -135,7 +135,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Tu perfil puede mostrarse públicamente en el canal si eliges publicarlo.\n"
         "• Puedes borrar todos tus datos en cualquier momento con /borrar.\n\n"
         "Cumplimos con los principios de la LOPD y RGPD.\n",
-        parse_mode=\"Markdown\"
+        parse_mode="Markdown"
     )
 
     await update.message.reply_text(
@@ -152,6 +152,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /fotos – cambiar tus fotos\n"
         "• /sugerencia <texto> – enviar sugerencia\n"
     )
+
 # ============================================================
 #   CREACIÓN / ACTUALIZACIÓN DE PERFIL
 # ============================================================
@@ -241,7 +242,6 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["estatura"] = est
 
-    # Guardar perfil
     user_id = str(update.effective_user.id)
     perfiles = cargar_perfiles()
     perfiles[user_id] = context.user_data.copy()
@@ -278,7 +278,6 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return ConversationHandler.END
-
 
 # ============================================================
 #   TEXTO Y FOTOS DE PERFIL (COMPATIBILIDAD)
