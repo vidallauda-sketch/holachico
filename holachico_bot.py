@@ -257,6 +257,27 @@ def obtener_fotos(p):
         return [p["foto"]]
     return []
 
+def mi_perfil(update, context):
+    user = update.effective_user
+    perfiles = load_data(PERFILES_FILE)
+    perfil = perfiles.get(str(user.id))
+
+    if not perfil:
+        update.message.reply_text("❌ Aún no tienes perfil. Usa /perfil para crearlo.")
+        return
+
+    texto = (
+        f"🧑 Tu perfil\n\n"
+        f"Edad: {perfil.get('edad','')}\n"
+        f"Ciudad: {perfil.get('ciudad','')}\n"
+        f"Busca: {perfil.get('busca','')}\n"
+        f"Rol: {perfil.get('rol','')}\n"
+        f"Estatura: {perfil.get('estatura','')}\n\n"
+        f"Descripción:\n{perfil.get('descripcion','')}"
+    )
+    update.message.reply_text(texto)
+
+
 async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     perfiles = cargar_perfiles()
     ids = list(perfiles.keys())
