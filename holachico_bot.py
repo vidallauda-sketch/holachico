@@ -21,10 +21,15 @@ from telegram.ext import (
 #   CONFIGURACIÓN
 # ------------------------------
 
-PERFILES_FILE = "data/perfiles.json"
-LIKES_FILE = "data/likes.json"
-CHATS_FILE = "data/chats.json"
-SUGERENCIAS_FILE = "data/sugerencias.json"
+from pathlib import Path
+import json
+
+BASE_DIR = Path(__file__).parent
+
+PERFILES_FILE = BASE_DIR / "perfiles.json"
+LIKES_FILE = BASE_DIR / "likes.json"
+CHATS_FILE = BASE_DIR / "chats.json"
+SUGERENCIAS_FILE = BASE_DIR / "sugerencias.json"
 
 ADMIN_ID = 8400361723
 TOKEN = "8197198334:AAGQMMTQSi_zplmgNQfYXvAMwjkDUq2qq3Q"
