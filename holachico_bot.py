@@ -177,8 +177,23 @@ async def fotos_listas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data["fotos"]:
         await update.message.reply_text("Necesitas enviar al menos una foto.")
         return FOTO
-    await update.message.reply_text("📅 ¿Qué edad tienes?")
-    return EDAD
+
+    botones = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📍 Usar mi ubicación actual", callback_data="usar_ubicacion")
+        ],
+        [
+            InlineKeyboardButton("✏️ Escribir ciudad manualmente", callback_data="ciudad_manual")
+        ]
+    ])
+
+    await update.message.reply_text(
+        "📍 ¿Quieres que detecte tu ciudad automáticamente?",
+        reply_markup=botones
+    )
+
+    return CIUDAD
+
 
 async def recibir_edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
     edad = update.message.text.strip()
