@@ -173,27 +173,14 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📸 Foto añadida. Envía otra o escribe /listo.")
     return FOTO
 
+# Volvemos al flujo simple: después de fotos -> pedir edad
 async def fotos_listas(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.user_data["fotos"]:
+    if not context.user_data.get("fotos"):
         await update.message.reply_text("Necesitas enviar al menos una foto.")
         return FOTO
 
-    botones = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📍 Usar mi ubicación actual", callback_data="usar_ubicacion")
-        ],
-        [
-            InlineKeyboardButton("✏️ Escribir ciudad manualmente", callback_data="ciudad_manual")
-        ]
-    ])
-
-    await update.message.reply_text(
-        "📍 ¿Quieres que detecte tu ciudad automáticamente?",
-        reply_markup=botones
-    )
-
-    return CIUDAD
-
+    await update.message.reply_text("📅 ¿Qué edad tienes?")
+    return EDAD
 
 async def recibir_edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
     edad = update.message.text.strip()
@@ -264,12 +251,16 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     p = context.user_data
 
+    # Protección: si falta algún campo esencial, avisar y terminar la conversación
+    required = ["edad", "ciudad", "busca", "descripcion", "rol", "estatura", "fotos"]
+    for key in required:
+        if key not in p:
+            await update.message.reply_text("❌ Algo salió mal. Por favor empieza de nuevo con /perfil.")
+            return ConversationHandler.END
+
     texto = (
         f"📸 *Tu perfil está listo*\n\n"
-        if "edad" not in p:
-    await update.message.reply_text("❌ Algo salió mal. Por favor empieza de nuevo con /perfil.")
-    return ConversationHandler.END
-
+        f"Edad: {p['edad']}\n"
         f"Ciudad: {p['ciudad']}\n"
         f"Busca: {p['busca']}\n"
         f"Descripción: {p['descripcion']}\n"
@@ -303,12 +294,12 @@ async def recibir_estatura(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def construir_texto_perfil(p):
     return (
-        f"Edad: {p['edad']}\n"
-        f"Ciudad: {p['ciudad']}\n"
-        f"Busca: {p['busca']}\n"
-        f"Descripción: {p['descripcion']}\n"
-        f"Rol: {p['rol']}\n"
-        f"Estatura: {p['estatura']}"
+        f"Edad: {p.get('edad','N/D')}\n"
+        f"Ciudad: {p.get('ciudad','N/D')}\n"
+        f"Busca: {p.get('busca','N/D')}\n"
+        f"Descripción: {p.get('descripcion','')}\n"
+        f"Rol: {p.get('rol','N/D')}\n"
+        f"Estatura: {p.get('estatura','N/D')}"
     )
 
 def obtener_fotos(p):
@@ -333,15 +324,20 @@ async def miperfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = (
         f"🧑 Tu perfil\n\n"
-        f"Edad: {p['edad']}\n"
-        f"Ciudad: {p['ciudad']}\n"
-        f"Busca: {p['busca']}\n"
-        f"Descripción: {p['descripcion']}\n"
-        f"Rol: {p['rol']}\n"
-        f"Estatura: {p['estatura']}"
+        f"Edad: {p.get('edad','N/D')}\n"
+        f"Ciudad: {p.get('ciudad','N/D')}\n"
+        f"Busca: {p.get('busca','N/D')}\n"
+        f"Descripción: {p.get('descripcion','')}\n"
+        f"Rol: {p.get('rol','N/D')}\n"
+        f"Estatura: {p.get('estatura','N/D')}"
     )
 
-    await update.message.reply_photo(photo=p["fotos"][0], caption=texto)
+    fotos = obtener_fotos(p)
+    if not fotos:
+        await update.message.reply_text("Tu perfil no tiene fotos.")
+        return
+
+    await update.message.reply_photo(photo=fotos[0], caption=texto)
 
 async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     perfiles = cargar_perfiles()
@@ -361,18 +357,38 @@ async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await mostrar_perfil(update, context)
 
-async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# mostrar_perfil acepta tanto Update como CallbackQuery (duck-typing)
+async def mostrar_perfil(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    # obtener el objeto message para enviar
+    if hasattr(update_or_query, "callback_query"):
+        # es CallbackQuery
+        query = update_or_query
+        message = query.message
+    else:
+        # es Update
+        message = update_or_query.message
+
     perfiles = cargar_perfiles()
-    ids = context.user_data["lista_perfiles"]
-    indice = context.user_data["indice"]
+    ids = context.user_data.get("lista_perfiles", [])
+    indice = context.user_data.get("indice", 0)
+
+    if not ids:
+        await message.reply_text("😕 No hay perfiles para mostrar.")
+        return
+
+    # proteger índice fuera de rango
+    if indice < 0 or indice >= len(ids):
+        context.user_data["indice"] = 0
+        indice = 0
+
     user_id = ids[indice]
-    p = perfiles[user_id]
+    p = perfiles.get(user_id, {})
 
     texto = construir_texto_perfil(p)
     fotos = obtener_fotos(p)
 
     if not fotos:
-        await update.message.reply_text("Este perfil no tiene fotos.")
+        await message.reply_text("Este perfil no tiene fotos.")
         return
 
     context.user_data["foto_index"] = 0
@@ -389,7 +405,7 @@ async def mostrar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("➡️ Siguiente", callback_data="siguiente")]
     ]
 
-    await update.message.reply_photo(
+    await message.reply_photo(
         photo=fotos[0],
         caption=texto,
         reply_markup=InlineKeyboardMarkup(botones)
@@ -407,7 +423,7 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_id = ids[indice]
-    p = perfiles[user_id]
+    p = perfiles.get(user_id, {})
     fotos = obtener_fotos(p)
 
     if not fotos:
@@ -441,79 +457,6 @@ async def galeria_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(botones)
     )
 
-from telegram import KeyboardButton, ReplyKeyboardMarkup
-
-async def ubicacion_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "ciudad_manual":
-        await query.edit_message_text("📍 ¿En qué ciudad estás?")
-        return
-
-    if query.data == "usar_ubicacion":
-        teclado = ReplyKeyboardMarkup(
-            [[KeyboardButton("📍 Enviar ubicación", request_location=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True
-        )
-
-        await query.edit_message_text(
-            "Pulsa el botón para enviar tu ubicación:",
-        )
-
-        await query.message.reply_text(
-            "📍 Envía tu ubicación:",
-            reply_markup=teclado
-        )
-
-    
-
-import requests
-
-async def recibir_ubicacion(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.location:
-        lat = update.message.location.latitude
-        lon = update.message.location.longitude
-
-        # Reverse geocoding con Nominatim (OpenStreetMap)
-        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
-
-        try:
-            r = requests.get(url, headers={"User-Agent": "HolaChicoBot"})
-            data = r.json()
-
-            ciudad = (
-                data.get("address", {}).get("city") or
-                data.get("address", {}).get("town") or
-                data.get("address", {}).get("village") or
-                data.get("address", {}).get("municipality")
-            )
-
-            if ciudad:
-                context.user_data["ciudad"] = ciudad
-
-                await update.message.reply_text(
-                    f"📍 Ciudad detectada: *{ciudad}*",
-                    parse_mode="Markdown"
-                )
-
-                await update.message.reply_text(
-                    "💘 ¿Qué buscas? (amigos, relación, charlar…)"
-                )
-
-                return BUSCA
-
-        except Exception:
-            pass
-
-        # Si falla la detección:
-        await update.message.reply_text(
-            "❌ No pude detectar tu ciudad automáticamente.\n"
-            "Por favor, escríbela manualmente:"
-        )
-        return CIUDAD
-
 # ============================================================
 #   BOTONES: LIKE / CONTACTAR / SIGUIENTE
 # ============================================================
@@ -532,12 +475,18 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
     likes = cargar_likes()
     asegurar_usuario_en_likes(likes, from_id)
 
+    # Protección: asegurar que lista_perfiles e indice existen
+    if "lista_perfiles" not in context.user_data or "indice" not in context.user_data:
+        # Si el callback no viene de la galería, permitir otras acciones (like/contactar)
+        if data.startswith("like_") or data.startswith("contactar_"):
+            pass
+        else:
+            await query.message.reply_text("❌ Debes usar /ver antes de navegar perfiles.")
+            return
+
     # SIGUIENTE
     if data == "siguiente":
-       if "indice" not in context.user_data:
-    await query.message.reply_text("❌ Debes usar /ver antes de navegar perfiles.")
-    return
-
+        context.user_data["indice"] += 1
 
         if context.user_data["indice"] >= len(context.user_data["lista_perfiles"]):
             await query.message.reply_text("🚫 No hay más perfiles por ahora.")
@@ -549,7 +498,7 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # LIKE
     if data.startswith("like_"):
-        target_id = data.split("_")[1]
+        target_id = data.split("_", 1)[1]
         asegurar_usuario_en_likes(likes, target_id)
 
         if target_id not in likes[from_id]["dados"]:
@@ -564,7 +513,7 @@ async def botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # CONTACTAR (BOTÓN QUE ABRE)
     if data.startswith("contactar_"):
-        target_id = data.split("_")[1]
+        target_id = data.split("_", 1)[1]
 
         teclado = InlineKeyboardMarkup([
             [InlineKeyboardButton("Abrir chat en Telegram", url=f"tg://user?id={from_id}")]
@@ -870,12 +819,12 @@ async def publicar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = (
         f"📸 *Nuevo perfil en HolaChico*\n\n"
-        f"Edad: {p['edad']}\n"
-        f"Ciudad: {p['ciudad']}\n"
-        f"Busca: {p['busca']}\n"
-        f"Descripción: {p['descripcion']}\n"
-        f"Rol: {p['rol']}\n"
-        f"Estatura: {p['estatura']}\n\n"
+        f"Edad: {p.get('edad','N/D')}\n"
+        f"Ciudad: {p.get('ciudad','N/D')}\n"
+        f"Busca: {p.get('busca','N/D')}\n"
+        f"Descripción: {p.get('descripcion','')}\n"
+        f"Rol: {p.get('rol','N/D')}\n"
+        f"Estatura: {p.get('estatura','N/D')}\n\n"
         f"👉 tg://user?id={user_id}"
     )
 
@@ -945,10 +894,6 @@ def main():
     app.add_handler(CallbackQueryHandler(galeria_callback, pattern="^foto_"))
     app.add_handler(CallbackQueryHandler(publicar_callback, pattern="^publicar_"))
     app.add_handler(CallbackQueryHandler(botones, pattern="^(like_|contactar_|siguiente)"))
-    app.add_handler(CallbackQueryHandler(ubicacion_callback, pattern="^(usar_ubicacion|ciudad_manual)$"))
-
-    # Ubicación
-    app.add_handler(MessageHandler(filters.LOCATION, recibir_ubicacion))
 
     # Chat privado
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_message))
