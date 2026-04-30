@@ -30,7 +30,7 @@ SUGERENCIAS_FILE = BASE_DIR / "sugerencias.json"
 
 ADMIN_ID = 8400361723
 TOKEN = "8197198334:AAHUucPDTesiJLaAJFPhk6tVOOPVVIfb6t0"
-CANAL_ID = -1003930339025
+CANAL_ID = -1003836572506
 
 # ============================================================
 #   UTILIDADES JSON
